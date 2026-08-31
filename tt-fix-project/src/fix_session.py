@@ -246,8 +246,21 @@ class FixSession:
         elif msg_type == b"0":  # Heartbeat
             pass
 
-        elif msg_type in (b"W", b"X"):  # MarketDataSnapshotFullRefresh / Incremental
+        elif msg_type == b"W":  # MarketDataSnapshot (full refresh)
             self._handle_market_data(msg)
+
+        elif msg_type == b"X":  # MarketDataIncrementalRefresh
+            # Not supported in Phase 1 (PROJECT.md section 6: full-refresh only).
+            # subscribe_market_data() requests MDUpdateType=0 (FULL_REFRESH),
+            # so TT shouldn't send this - but its shape genuinely differs
+            # from a snapshot (Symbol lives per-entry inside NoMDEntries, not
+            # at top level; entries carry a required MDUpdateAction we don't
+            # handle), so if it ever arrives it must not be run through
+            # _handle_market_data, which assumes the snapshot's shape.
+            logger.warning(
+                "Received MarketDataIncrementalRefresh (35=X), which Phase 1 "
+                "does not support - ignoring"
+            )
 
         elif msg_type == b"8":  # ExecutionReport
             if self.on_execution:
