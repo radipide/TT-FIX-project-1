@@ -98,9 +98,16 @@ def main():
     time.sleep(0.5)
 
     print(f"Sending {args.count} market orders for {args.symbol} ...")
-    for _ in range(args.count):
-        cl_ord_id = fs.send_new_order(args.symbol, "buy", 1, order_type="market")
+    for i in range(args.count):
+        # Generate ClOrdID and record start time BEFORE sending - if we
+        # timed after send_new_order() returned, a very fast localhost ack
+        # could arrive on the background read thread before this line runs,
+        # get dropped (nothing in `pending` yet), and we'd end up timing the
+        # *next* execution report instead (the delayed Filled, not the
+        # near-instant New ack). Recording first, then sending, closes that race.
+        cl_ord_id = f"LAT{int(time.time() * 1_000_000)}-{i}"
         pending[cl_ord_id] = time.time()
+        fs.send_new_order(args.symbol, "buy", 1, order_type="market", cl_ord_id=cl_ord_id)
         time.sleep(0.02)  # small pacing gap - avoid overwhelming the mock/session
 
     done_event.wait(timeout=30)
