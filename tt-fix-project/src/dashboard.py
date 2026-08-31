@@ -93,8 +93,15 @@ with st.sidebar:
     st.header("Connection")
     if not st.session_state.connected:
         if st.button("Connect"):
-            connect(settings)
-            st.rerun()
+            try:
+                connect(settings)
+                st.rerun()
+            except OSError as e:
+                st.error(
+                    f"Could not connect to {settings.host}:{settings.port} - {e}\n\n"
+                    "Check HOST and PORT in .env, and that you're on TT's SIM/UAT "
+                    "endpoint (not the placeholder example value)."
+                )
     else:
         st.success("Connected")
         if st.button("Disconnect"):
