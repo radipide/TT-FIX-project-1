@@ -35,7 +35,7 @@ class FixSession:
         port,
         sender_comp_id,
         target_comp_id,
-        username=None,
+        account,
         password=None,
         fix_version="FIX.4.4",
         heartbeat_interval=30,
@@ -44,7 +44,10 @@ class FixSession:
         self.port = port
         self.sender_comp_id = sender_comp_id
         self.target_comp_id = target_comp_id
-        self.username = username
+        # Account (tag 1) is REQUIRED on NewOrderSingle per TT's FIX schema
+        # (verified against docs/tt-fix-reference/schemas/TT-FIX42_legacy.xml).
+        # Orders sent without it will very likely be rejected.
+        self.account = account
         self.password = password
         self.fix_version = fix_version
         self.heartbeat_interval = heartbeat_interval
@@ -111,13 +114,19 @@ class FixSession:
         logger.debug("SENT: %s", raw.replace(b"\x01", b"|"))
 
     def _send_logon(self):
+        # NOTE: Username (tag 553) is a standard FIX tag but is NOT part of
+        # TT's supported field list for Logon (verified against
+        # docs/tt-fix-reference/schemas/TT-FIX42_legacy.xml - Logon only
+        # supports EncryptMethod, HeartBtInt, RawData, ResetSeqNumFlag,
+        # NextExpectedMsgSeqNum, ByPassSessionRecovery, Password, StartDate,
+        # EndDate, SecurityExchange, ExDestination, CustomMode, Duration).
+        # TT explicitly warns that submitting unsupported tags can produce
+        # unexpected results, so it is intentionally NOT sent here.
         msg = self._new_message(b"A")
         msg.append_pair(98, 0)  # EncryptMethod = None
         msg.append_pair(108, self.heartbeat_interval)
-        if self.username:
-            msg.append_pair(553, self.username)
         if self.password:
-            msg.append_pair(554, self.password)
+            msg.append_pair(554, self.password)  # Password
         self._send(msg)
 
     def _send_logout(self):
@@ -169,6 +178,7 @@ class FixSession:
 
         msg = self._new_message(b"D")  # NewOrderSingle
         msg.append_pair(11, cl_ord_id)  # ClOrdID
+        msg.append_pair(1, self.account)  # Account - REQUIRED by TT schema
         msg.append_pair(55, symbol)  # Symbol
         msg.append_pair(54, 1 if side.lower() == "buy" else 2)  # Side
         msg.append_utc_timestamp(60)  # TransactTime

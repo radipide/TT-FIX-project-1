@@ -5,10 +5,13 @@ ever be hardcoded elsewhere in the codebase - everything comes through this
 module so the same code runs unchanged against TT UAT (or, eventually and
 carefully, production) just by swapping .env values.
 
-Note: the FIX credential env vars are named TT_USERNAME / TT_PASSWORD
-rather than USERNAME / PASSWORD - Windows sets an OS-level USERNAME env var
-to the logged-in user by default, which would silently shadow a FIX
-username if we reused that name.
+Note on ACCOUNT vs TT_USERNAME: verified against
+docs/tt-fix-reference/schemas/TT-FIX42_legacy.xml, TT's Logon (A) message
+has NO Username field at all (that's a standard FIX tag TT doesn't
+support), so there is nothing to log in with beyond SenderCompID/Password.
+Account (tag 1), however, IS a required field on NewOrderSingle - orders
+sent without it will likely be rejected. ACCOUNT replaces the old
+TT_USERNAME field for that reason.
 """
 from __future__ import annotations
 
@@ -24,7 +27,7 @@ load_dotenv()
 class Settings:
     sender_comp_id: str
     target_comp_id: str
-    tt_username: str
+    account: str
     tt_password: str
     host: str
     port: int
@@ -47,7 +50,7 @@ def load_settings() -> Settings:
     return Settings(
         sender_comp_id=_require("SENDER_COMP_ID"),
         target_comp_id=_require("TARGET_COMP_ID"),
-        tt_username=os.getenv("TT_USERNAME", ""),
+        account=_require("ACCOUNT"),
         tt_password=os.getenv("TT_PASSWORD", ""),
         host=_require("HOST"),
         port=int(_require("PORT")),

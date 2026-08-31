@@ -41,7 +41,7 @@ def connect(settings):
         port=settings.port,
         sender_comp_id=settings.sender_comp_id,
         target_comp_id=settings.target_comp_id,
-        username=settings.tt_username or None,
+        account=settings.account,
         password=settings.tt_password or None,
         fix_version=settings.fix_version,
         heartbeat_interval=settings.heartbeat_interval,
