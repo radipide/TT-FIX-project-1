@@ -286,12 +286,22 @@ class FixSession:
 
     @staticmethod
     def _execution_report_to_dict(msg):
+        # order_id, exec_type, cum_qty, avg_px, leaves_qty are all
+        # required="Y" on ExecutionReport per TT's schema (verified against
+        # TT-FIX42_legacy.xml / TT-FIX44_legacy.xml) - exec_type in
+        # particular is what actually says a fill happened; ord_status
+        # alone is just the order's current state.
         return {
             "cl_ord_id": msg.get(11),
+            "order_id": msg.get(37),
             "symbol": msg.get(55),
             "side": msg.get(54),
             "ord_status": msg.get(39),
+            "exec_type": msg.get(150),
             "last_qty": msg.get(32),
             "last_px": msg.get(31),
+            "cum_qty": msg.get(14),
+            "avg_px": msg.get(6),
+            "leaves_qty": msg.get(151),
             "text": msg.get(58),
         }
