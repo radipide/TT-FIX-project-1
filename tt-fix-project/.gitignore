@@ -1,0 +1,19 @@
+# secrets
+.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# quickfix runtime state
+store/
+log/
+*.log
+
+# latency data (large / regenerable)
+data/*.csv
+
+# os
+.DS_Store

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TT FIX Dashboard</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; background: #0f1115; color: #e6e6e6; }
+    h1 { font-size: 1.3rem; }
+    .price-row { display: flex; gap: 2rem; margin: 1rem 0; }
+    .price-box { padding: 1rem 2rem; border-radius: 8px; font-size: 1.5rem; font-weight: 600; }
+    .bid { background: #123; color: #6cf; }
+    .ask { background: #312; color: #f96; }
+    .stale { opacity: 0.4; }
+    form { display: flex; gap: 0.5rem; align-items: center; margin: 1rem 0; }
+    input, select, button { padding: 0.4rem; border-radius: 4px; border: 1px solid #444; background: #1a1c22; color: #eee; }
+    button { cursor: pointer; background: #2a5; color: white; border: none; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+    th, td { border-bottom: 1px solid #333; padding: 0.4rem 0.6rem; text-align: left; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>TT FIX Dashboard — ES @ XCME</h1>
+
+  <div class="price-row" id="priceRow">
+    <div class="price-box bid" id="bidBox">Bid: --</div>
+    <div class="price-box ask" id="askBox">Ask: --</div>
+    <span id="connStatus">connecting...</span>
+  </div>
+
+  <form id="orderForm">
+    <select id="side">
+      <option value="BUY">BUY</option>
+      <option value="SELL">SELL</option>
+    </select>
+    <select id="orderType">
+      <option value="MARKET">MARKET</option>
+      <option value="LIMIT">LIMIT</option>
+    </select>
+    <input type="number" id="qty" placeholder="Qty" value="1" step="1" min="1">
+    <input type="number" id="price" placeholder="Price (limit only)" step="0.01">
+    <button type="submit">Place order</button>
+  </form>
+
+  <table>
+    <thead>
+      <tr><th>ClOrdID</th><th>Side</th><th>Type</th><th>Qty</th><th>Price</th><th>Status</th><th>Latency (ms)</th></tr>
+    </thead>
+    <tbody id="ordersBody"></tbody>
+  </table>
+
+  <script>
+    const bidBox = document.getElementById('bidBox');
+    const askBox = document.getElementById('askBox');
+    const connStatus = document.getElementById('connStatus');
+
+    const ws = new WebSocket(`ws://${location.host}/ws/book`);
+    ws.onmessage = (evt) => {
+      const data = JSON.parse(evt.data);
+      bidBox.textContent = `Bid: ${data.bid ?? '--'}`;
+      askBox.textContent = `Ask: ${data.ask ?? '--'}`;
+      connStatus.textContent = data.connected ? 'live' : 'disconnected';
+      document.getElementById('priceRow').classList.toggle('stale', !data.connected);
+    };
+
+    document.getElementById('orderForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = {
+        side: document.getElementById('side').value,
+        order_type: document.getElementById('orderType').value,
+        qty: parseFloat(document.getElementById('qty').value),
+        price: document.getElementById('price').value
+          ? parseFloat(document.getElementById('price').value)
+          : null,
+      };
+      await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      refreshOrders();
+    });
+
+    async function refreshOrders() {
+      const res = await fetch('/api/orders');
+      const orders = await res.json();
+      const body = document.getElementById('ordersBody');
+      body.innerHTML = '';
+      for (const o of orders) {
+        const row = document.createElement('tr');
+        row.innerHTML = `<td>${o.cl_ord_id}</td><td>${o.side}</td><td>${o.order_type}</td>
+          <td>${o.qty}</td><td>${o.price ?? ''}</td><td>${o.status}</td>
+          <td>${o.latency_ms !== null ? o.latency_ms.toFixed(2) : ''}</td>`;
+        body.appendChild(row);
+      }
+    }
+
+    setInterval(refreshOrders, 1000);
+    refreshOrders();
+  </script>
+</body>
+</html>

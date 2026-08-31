@@ -1,0 +1,4 @@
+simplefix==1.0.14
+streamlit==1.62.0
+pandas==3.0.5
+python-dotenv==1.0.1
