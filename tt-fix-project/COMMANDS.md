@@ -1,24 +1,15 @@
-# TT FIX Project — Command Reference
+# TT FIX Project — Command Reference (Updated)
 
-Everything run so far, organized by purpose. One-time setup vs. things
-you'll run every session are marked separately.
+Everything from the original setup, plus everything added since (two-session
+UAT config, SSL diagnostics, spread strategy dashboard).
 
 ---
 
 ## 1. One-time machine setup
 
 ```powershell
-# Set PowerShell to allow venv activation scripts (one-time per Windows account)
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
-```
-
-- **Python 3.11** installed from python.org (alongside your existing 3.13) — needed originally for `quickfix` wheel compatibility, kept since it's what the venv is built on now.
-- **Git for Windows** installed from git-scm.com.
-- (No longer needed: Visual Studio Build Tools "Desktop development with C++" — that was for compiling `quickfix`, which we abandoned in favor of `simplefix`. Harmless to leave installed.)
-
-```powershell
-# Confirm both Python versions are visible
-py -0
+py -0   # confirm Python 3.11 is installed alongside 3.13
 ```
 
 ---
@@ -27,137 +18,143 @@ py -0
 
 ```powershell
 cd "C:\Fincoursa\TT FIX\tt-fix-project"
-
-# Create venv on Python 3.11 specifically
 py -3.11 -m venv venv
 venv\Scripts\activate
-python --version   # should print Python 3.11.x
-
-# Upgrade pip tooling
 python -m pip install --upgrade pip setuptools wheel
-
-# Install the actual dependencies (final working set)
-pip install -r requirements.txt
-# equivalent to: pip install simplefix streamlit pandas python-dotenv
+pip install -r requirements.txt   # simplefix, streamlit, pandas, python-dotenv
 ```
 
 ```powershell
-# Git identity (if not already set globally on this machine)
 git config --global user.name "Your Name"
 git config --global user.email "you@example.com"
-
-# Connect to GitHub remote (already done)
 git remote add origin https://github.com/radipide/TT-FIX-project-1.git
 git branch -M main
 ```
 
 ---
 
-## 3. Every time you sit down to work
+## 3. Every session
 
 ```powershell
 cd "C:\Fincoursa\TT FIX\tt-fix-project"
 venv\Scripts\activate
 ```
 
-You'll know it worked when the prompt shows `(venv)` at the start.
+Confirm it worked — prompt should show `(venv)`.
 
 ---
 
-## 4. Config setup (one-time, redo if .env is lost/reset)
+## 4. Config setup
 
 ```powershell
 copy config.example.env .env
+notepad .env
 ```
 
-Then edit `.env` and fill in real values:
+Fill in (two-session structure — order routing and market data are separate):
 ```
-SENDER_COMP_ID=<from TT>
-TARGET_COMP_ID=TT
-ACCOUNT=<from TT — required on every order, not a login username>
-TT_PASSWORD=<from TT>
-HOST=<TT SIM or UAT host — NOT the placeholder example domain>
-PORT=<TT SIM or UAT port>
-FIX_VERSION=FIX.4.4          # confirm with TT — 4.2 vs 4.4
-HEARTBEAT_INTERVAL=30
-DEFAULT_SYMBOL=ES            # confirm exact CME symbol format with TT
+SENDER_COMP_ID=
+ON_BEHALF_OF_SUB_ID=
+OR_TARGET_COMP_ID=
+OR_PASSWORD=
+ACCOUNT=
+MD_TARGET_COMP_ID=
+MD_PASSWORD=
 ```
+`OR_HOST`/`OR_PORT`/`MD_HOST`/`MD_PORT` already default to TT's real public UAT endpoints — only override if told to use something different (e.g. stunnel).
 
-`.env` is gitignored — it never gets committed, and needs to be redone if you ever re-clone the repo on a new machine.
+**Verify `.env` is actually git-ignored (do this once, cheap insurance):**
+```powershell
+git check-ignore .env
+```
+Should print `.env` back. If it prints nothing, stop and fix `.gitignore` before going further.
 
 ---
 
 ## 5. Running things
 
-**Dashboard** (market data + order entry UI):
+**Main dashboard** (order routing + market data, manual instrument entry):
 ```powershell
 streamlit run src\dashboard.py
 ```
-Opens at `http://localhost:8501`.
 
-**Mock TT acceptor** (lets you test without real credentials — run in its own terminal, leave it running):
+**Strategy dashboard** (HO*42-CL / BZ-CL spreads, rolling stats, entry/exit signals):
+```powershell
+streamlit run src\strategy_dashboard.py
+```
+
+**Mock TT acceptor** (local testing without real credentials):
 ```powershell
 python src\mock_acceptor.py
 ```
 
-**Latency harness** — against the mock (default):
+**Latency harness:**
 ```powershell
-python scripts\measure_latency.py --count 200
+python scripts\measure_latency.py --count 200          # against mock
+python scripts\measure_latency.py --count 200 --real   # against real TT
 ```
-Against real TT, once `.env` has real SIM/UAT values:
-```powershell
-python scripts\measure_latency.py --count 200 --real
-```
-Writes results to `data\latency_run.csv`.
-
-**Full local test loop** (three terminals, all with venv activated):
-1. `python src\mock_acceptor.py`
-2. `streamlit run src\dashboard.py` — click Connect, Subscribe, place test orders
-3. `python scripts\measure_latency.py --count 200` — get latency numbers
 
 ---
 
-## 6. Git workflow (every commit — one branch, small and often)
+## 6. Network / SSL diagnostics (use if a real connection fails)
+
+**Basic TCP reachability, bypassing TLS entirely:**
+```powershell
+Test-NetConnection -ComputerName fixorderrouting-ext-uat-cert.trade.tt -Port 11502
+Test-NetConnection -ComputerName fixmarketdata-ext-uat-cert.trade.tt -Port 11503
+```
+Check `TcpTestSucceeded` — if `False`, it's a network/firewall/whitelisting issue, not a code issue.
+
+**TLS handshake test, independent of our Python code** (run in Git Bash, not PowerShell):
+```bash
+openssl s_client -connect fixorderrouting-ext-uat-cert.trade.tt:11502
+openssl s_client -connect fixmarketdata-ext-uat-cert.trade.tt:11503
+```
+If this also fails the same way, the problem is environmental (network/server-side), not in `fix_session.py`.
+
+---
+
+## 7. Git workflow (every commit)
 
 ```powershell
-git status                 # see what changed
-git diff                   # see exact changes before staging
-git add <specific-file>    # or: git add -A for everything
-git commit -m "type: short description of why, not just what"
+git status
+git diff
+git add <specific-file>      # prefer this over -A
+git commit -m "type: why, not just what"
 git push
 ```
 
 ---
 
-## 7. Diagnostic commands used while debugging
+## 8. Diagnostic commands used while debugging
 
 ```powershell
-# Check what's actually in a file without opening an editor
 type src\config.py
 findstr "SOME_STRING" src\dashboard.py
-
-# List directory contents
 dir
 dir src
-
-# Redirect full command output to a file (for long error messages)
 pip install quickfix > install_log.txt 2>&1
 notepad install_log.txt
 ```
 
 ---
 
-## 8. What you still need from TT / your manager
+## 9. Skill file (Claude Code auto-loads this in the repo)
 
-These aren't commands — they're the blockers on everything past local
-mock testing:
+Location: `.claude/skills/git-hygiene/SKILL.md` — covers git safety (never
+blind `git add -A`, always `git status`/`git pull` first) and code
+discipline (no overengineering, minimize latency in the FIX/order path).
 
-- [ ] SIM credentials: `SENDER_COMP_ID`, `TARGET_COMP_ID`, `ACCOUNT`, `TT_PASSWORD`, `HOST`, `PORT`
-- [ ] UAT credentials (same fields, separate environment)
-- [ ] Confirmation: FIX 4.2 or 4.4 for your actual session
-- [ ] Confirmation: exact CME symbol format TT's gateway expects (e.g. `ES` vs `ESZ6`)
-- [ ] Whether market data entitlement is separate from order routing entitlement
+---
 
-Once those land, the only commands that change are filling in `.env`
-and adding `--real` to the latency script — everything else (dashboard,
-git workflow) stays the same.
+## 10. What's still open
+
+- [ ] Confirm `SENDER_COMP_ID` (your own identity, not TT's Remote Comp ID)
+- [ ] Confirm literal `ON_BEHALF_OF_SUB_ID` value — `AJUAT` or `33986`
+- [ ] Both session passwords in `.env` (never here in chat)
+- [ ] Real TT connection still untested past TLS handshake — last attempt
+      failed at handshake stage (timeout / EOF), likely IP whitelisting or
+      firewall — see section 6 diagnostics
+- [ ] Exact CME symbol format for HO/CL/BZ (month codes etc.)
+- [ ] Decide on a stop-loss for the spread strategy (currently only a 0.5σ
+      reversion exit + 90-min time exit — no price-based downside limit)
